@@ -25,6 +25,7 @@ interface QuotaData {
         name: string;
         used: number;
         total: number;
+        remaining: number;
         percentage: number;
     };
     resetTime: Date;
@@ -140,6 +141,10 @@ async function refreshQuota(showMessage: boolean = false) {
 
     if (!apiKey) {
         updateStatusBarDefault();
+        // If user clicked (showMessage=true), prompt for API key
+        if (showMessage) {
+            await setApiKey();
+        }
         return;
     }
 
@@ -148,9 +153,8 @@ async function refreshQuota(showMessage: boolean = false) {
         updateStatusBar(quotaData);
 
         if (showMessage) {
-            vscode.window.showInformationMessage(
-                `MiniMax Quota: ${quotaData.mainModel.name} - ${quotaData.mainModel.used}/${quotaData.mainModel.total}`
-            );
+            // 直接刷新，不弹通知
+            await setApiKey();
         }
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -213,9 +217,10 @@ function fetchMiniMaxQuota(apiKey: string): Promise<QuotaData> {
                             return;
                         }
 
-                        const used = mainModelData.current_interval_usage_count || 0;
+                        const remaining = mainModelData.current_interval_usage_count || 0;
                         const total = mainModelData.current_interval_total_count || 1;
-                        const percentage = total > 0 ? (used / total) * 100 : 0;
+                        const used = total - remaining;
+                        const remainingPercentage = total > 0 ? (remaining / total) * 100 : 0;
 
                         const quotaData: QuotaData = {
                             models: models,
@@ -223,7 +228,8 @@ function fetchMiniMaxQuota(apiKey: string): Promise<QuotaData> {
                                 name: mainModelData.model_name,
                                 used: used,
                                 total: total,
-                                percentage: percentage
+                                remaining: remaining,
+                                percentage: remainingPercentage
                             },
                             resetTime: new Date(mainModelData.end_time)
                         };
@@ -256,28 +262,28 @@ function fetchMiniMaxQuota(apiKey: string): Promise<QuotaData> {
 }
 
 function updateStatusBar(quotaData: QuotaData) {
-    const { mainModel, models, resetTime } = quotaData;
-    const percentage = mainModel.percentage;
+    const { mainModel, resetTime } = quotaData;
+    const remainingPercentage = mainModel.percentage;
 
-    // Choose icon based on usage percentage
+    // Choose icon based on remaining percentage
     let icon: string;
-    if (percentage < 50) {
+    if (remainingPercentage > 50) {
         icon = '$(check)';
-    } else if (percentage < 75) {
+    } else if (remainingPercentage > 25) {
         icon = '$(info)';
-    } else if (percentage < 90) {
+    } else if (remainingPercentage > 10) {
         icon = '$(warning)';
     } else {
         icon = '$(error)';
     }
 
-    // Status bar text: show percentage
-    statusBarItem.text = `${icon} MiniMax: ${percentage.toFixed(1)}%`;
+    // Status bar text: show remaining percentage
+    statusBarItem.text = `${icon} MiniMax: ${remainingPercentage.toFixed(1)}%`;
 
-    // Set background color based on usage
-    if (percentage >= 90) {
+    // Set background color based on remaining percentage
+    if (remainingPercentage <= 10) {
         statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
-    } else if (percentage >= 75) {
+    } else if (remainingPercentage <= 25) {
         statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
     } else {
         statusBarItem.backgroundColor = undefined;
@@ -286,7 +292,7 @@ function updateStatusBar(quotaData: QuotaData) {
     // Build tooltip markdown
     const tooltip = new vscode.MarkdownString();
     tooltip.appendMarkdown('**MiniMax API 配额**\n\n');
-    tooltip.appendMarkdown(`token使用率：${percentage.toFixed(0)}%\n\n`);
+    tooltip.appendMarkdown(`token剩余：${remainingPercentage.toFixed(0)}%\n\n`);
     tooltip.appendMarkdown(`配额消耗：${mainModel.used}/${mainModel.total}\n\n`);
 
     // Calculate time until reset

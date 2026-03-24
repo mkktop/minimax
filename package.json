@@ -1,14 +1,25 @@
 {
   "name": "minimax-quota-monitor",
-  "displayName": "MiniMax Quota Monitor",
-  "description": "Monitor MiniMax API quota usage in VSCode status bar",
-  "version": "1.0.0",
-  "publisher": "minimax",
+  "displayName": "MiniMax API配额监控",
+  "description": "在 VSCode 状态栏监控 MiniMax API 配额使用情况",
+  "version": "1.0.1",
+  "publisher": "mkktop",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mkktop/minimax-quota-monitor"
+  },
   "engines": {
     "vscode": "^1.74.0"
   },
   "categories": [
     "Other"
+  ],
+  "keywords": [
+    "minimax",
+    "api",
+    "quota",
+    "monitor",
+    "statusbar"
   ],
   "activationEvents": [
     "onStartupFinished"
