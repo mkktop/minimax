@@ -1,0 +1,63 @@
+{
+  "name": "minimax-quota-monitor",
+  "displayName": "MiniMax Quota Monitor",
+  "description": "Monitor MiniMax API quota usage in VSCode status bar",
+  "version": "1.0.0",
+  "publisher": "minimax",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "icon": "icon.png",
+  "contributes": {
+    "commands": [
+      {
+        "command": "minimaxQuota.setApiKey",
+        "title": "MiniMax: Set API Key"
+      },
+      {
+        "command": "minimaxQuota.refreshQuota",
+        "title": "MiniMax: Refresh Quota"
+      },
+      {
+        "command": "minimaxQuota.setRefreshInterval",
+        "title": "MiniMax: Set Refresh Interval"
+      }
+    ],
+    "configuration": {
+      "title": "MiniMax Quota Monitor",
+      "properties": {
+        "minimaxQuotaMonitor.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "MiniMax API Key"
+        },
+        "minimaxQuotaMonitor.refreshInterval": {
+          "type": "number",
+          "default": 300,
+          "description": "Refresh interval in seconds (minimum 10)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.74.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "typescript": "^5.0.0"
+  }
+}
