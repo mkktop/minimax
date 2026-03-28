@@ -352,7 +352,7 @@ function buildTooltip(data: QuotaData): vscode.MarkdownString {
     tip.isTrusted = true;
 
     // ── 套餐额度 ──
-    tip.appendMarkdown(`**剩余额度**  \n`);
+    tip.appendMarkdown(`**已用额度**  \n`);
     tip.appendMarkdown(`- **${pct}%** · ${used}/${total}  \n`);
     tip.appendMarkdown(`- 重置: ${formatResetCountdown(new Date(mainModel.end_time))}  \n`);
 
