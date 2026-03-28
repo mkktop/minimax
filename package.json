@@ -2,7 +2,7 @@
   "name": "minimax-quota-monitor",
   "displayName": "MiniMax API配额监控",
   "description": "在 VSCode 状态栏监控 MiniMax API 配额使用情况",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "publisher": "mkktop",
   "repository": {
     "type": "git",
