@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm install
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Compile
+        run: npx tsc -p ./
+
+      - name: Package VSIX
+        run: npx vsce package --no-dependencies
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: minimax-quota-monitor
+          path: "*.vsix"

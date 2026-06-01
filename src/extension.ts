@@ -5,14 +5,20 @@ import * as https from 'https';
 
 interface MiniMaxModelRemain {
     model_name: string;
-    start_time: string;
-    end_time: string;
+    start_time: number;           // milliseconds
+    end_time: number;             // milliseconds
     remains_time: number;
     current_interval_total_count: number;
     current_interval_usage_count: number;
     current_weekly_total_count: number;
     current_weekly_usage_count: number;
+    weekly_start_time: number;    // milliseconds (new)
+    weekly_end_time: number;      // milliseconds (new)
     weekly_remains_time: number;
+    current_interval_status: number;               // new
+    current_interval_remaining_percent: number;     // new - remaining %
+    current_weekly_status: number;                  // new
+    current_weekly_remaining_percent: number;       // new - remaining %
 }
 
 interface QuotaResponse {
@@ -108,7 +114,7 @@ function daysUntil(d: Date): number {
 
 async function fetchQuota(apiKey: string): Promise<MiniMaxModelRemain[]> {
     const { statusCode, body } = await httpsGet(
-        'https://www.minimaxi.com/v1/api/openplatform/coding_plan/remains',
+        'https://www.minimaxi.com/v1/token_plan/remains',
         { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' }
     );
     if (statusCode === 401) throw new Error('Invalid API Key');
@@ -276,8 +282,10 @@ async function refreshQuota(showMessage = false) {
 
         if (!models.length) throw new Error('No quota data available');
 
-        // Separate main model (MiniMax-M*) from daily-limit models
+        // Separate main model from daily-limit models
+        // New API uses "general", "video" etc.; old API used "MiniMax-M*" prefixes
         const mainModel = models.find(m => m.model_name.startsWith('MiniMax-M'))
+            || models.find(m => m.model_name === 'general')
             || models.find(m => m.current_interval_total_count > 0)
             || models[0];
         const dailyModels = models.filter(m => m.model_name !== mainModel.model_name);
@@ -315,10 +323,25 @@ async function refreshQuota(showMessage = false) {
 
 function updateStatusBar(data: QuotaData) {
     const { mainModel } = data;
-    const remaining = mainModel.current_interval_usage_count || 0;
-    const total = mainModel.current_interval_total_count || 1;
-    const used = total - remaining;
-    const pct = total > 0 ? (used / total) * 100 : 0;
+
+    // Prefer percentage-based calculation from new API, fall back to count-based
+    let pct: number;
+    let used: number;
+    let total: number;
+
+    if (mainModel.current_interval_remaining_percent > 0 || mainModel.current_interval_total_count === 0) {
+        // New API: remaining_percent is "remaining" percentage
+        const remainingPct = mainModel.current_interval_remaining_percent;
+        pct = 100 - remainingPct;
+        used = pct;
+        total = 100;
+    } else {
+        // Fallback: count-based (legacy API compatibility)
+        const remaining = mainModel.current_interval_usage_count || 0;
+        total = mainModel.current_interval_total_count || 1;
+        used = total - remaining;
+        pct = total > 0 ? (used / total) * 100 : 0;
+    }
 
     // Status bar text & color
     const icon = pct < 50 ? '$(check)' : pct < 75 ? '$(info)' : pct < 90 ? '$(warning)' : '$(error)';
@@ -339,13 +362,24 @@ function updateStatusBar(data: QuotaData) {
 function buildTooltip(data: QuotaData): vscode.MarkdownString {
     const { mainModel, subscription, stats } = data;
 
-    const remaining = mainModel.current_interval_usage_count || 0;
-    const total = mainModel.current_interval_total_count || 1;
-    const used = total - remaining;
-    const pct = total > 0 ? Math.round((used / total) * 100) : 0;
+    // Prefer percentage-based calculation from new API
+    let pct: number;
+    let usedDisplay: string;
+    let totalDisplay: string;
 
-    const weeklyTotal = mainModel.current_weekly_total_count;
-    const weeklyRemaining = mainModel.current_weekly_usage_count || 0;
+    if (mainModel.current_interval_remaining_percent > 0 || mainModel.current_interval_total_count === 0) {
+        const remainingPct = mainModel.current_interval_remaining_percent;
+        pct = 100 - remainingPct;
+        usedDisplay = `${pct.toFixed(0)}%`;
+        totalDisplay = '100%';
+    } else {
+        const remaining = mainModel.current_interval_usage_count || 0;
+        const total = mainModel.current_interval_total_count || 1;
+        const used = total - remaining;
+        pct = total > 0 ? Math.round((used / total) * 100) : 0;
+        usedDisplay = used.toString();
+        totalDisplay = total.toString();
+    }
 
     const tip = new vscode.MarkdownString();
     tip.supportHtml = true;
@@ -353,10 +387,17 @@ function buildTooltip(data: QuotaData): vscode.MarkdownString {
 
     // ── 套餐额度 ──
     tip.appendMarkdown(`**已用额度**  \n`);
-    tip.appendMarkdown(`- **${pct}%** · ${used}/${total}  \n`);
+    tip.appendMarkdown(`- **${pct}%** · ${usedDisplay}/${totalDisplay}  \n`);
     tip.appendMarkdown(`- 重置: ${formatResetCountdown(new Date(mainModel.end_time))}  \n`);
 
-    if (weeklyTotal && weeklyTotal > 0) {
+    // Weekly info
+    if (mainModel.current_weekly_remaining_percent > 0 || mainModel.current_weekly_total_count === 0) {
+        const weeklyRemainingPct = mainModel.current_weekly_remaining_percent;
+        const weeklyPct = 100 - weeklyRemainingPct;
+        tip.appendMarkdown(`- 周限额: ${weeklyPct}% 已用 (剩余 ${weeklyRemainingPct}%)  \n`);
+    } else if (mainModel.current_weekly_total_count && mainModel.current_weekly_total_count > 0) {
+        const weeklyTotal = mainModel.current_weekly_total_count;
+        const weeklyRemaining = mainModel.current_weekly_usage_count || 0;
         const weeklyUsed = weeklyTotal - weeklyRemaining;
         const weeklyPct = Math.round((weeklyUsed / weeklyTotal) * 100);
         tip.appendMarkdown(`- 周限额: ${weeklyUsed}/${weeklyTotal} (${weeklyPct}%)  \n`);
