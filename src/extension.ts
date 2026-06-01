@@ -169,20 +169,20 @@ function calculateStats(records: ChargeRecord[]): QuotaData['stats'] {
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     const sevenDaysAgo = now.getTime() - 7 * 86400000;
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const thirtyDaysAgo = now.getTime() - 30 * 86400000;
 
     let yesterdayTokens = 0;
     let sevenDayTokens = 0;
-    let monthTokens = 0;
+    let periodTokens = 0;
 
     for (const r of records) {
         const ts = r.created_at * 1000;
         const token = Number(r.consume_token);
         if (ts >= todayStart - 86400000 && ts < todayStart) yesterdayTokens += token;
         if (ts >= sevenDaysAgo) sevenDayTokens += token;
-        if (ts >= monthStart) monthTokens += token;
+        if (ts >= thirtyDaysAgo) periodTokens += token;
     }
-    return { yesterdayTokens, sevenDayTokens, periodTokens: monthTokens };
+    return { yesterdayTokens, sevenDayTokens, periodTokens };
 }
 
 // ─── Extension Lifecycle ──────────────────────────────────────────────
@@ -411,7 +411,7 @@ function buildTooltip(data: QuotaData): vscode.MarkdownString {
         tip.appendMarkdown(`**Token 消耗统计**\n\n`);
         tip.appendMarkdown(`- 昨日: ${formatTokensCN(stats.yesterdayTokens)}\n`);
         tip.appendMarkdown(`- 近7天: ${formatTokensCN(stats.sevenDayTokens)}\n`);
-        tip.appendMarkdown(`- 当月: ${formatTokensCN(stats.periodTokens)}\n`);
+        tip.appendMarkdown(`- 近30天: ${formatTokensCN(stats.periodTokens)}\n`);
         tip.appendMarkdown('\n');
     }
 
