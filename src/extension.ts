@@ -45,6 +45,11 @@ interface ChargeRecord {
 
 interface BillingResponse {
     charge_records: ChargeRecord[];
+    total_cnt?: number;
+    consume_cash_sum?: string;
+    consume_token_sum?: string;
+    consume_cash_after_voucher_sum?: string;
+    base_resp?: { status_code: number; status_msg: string };
 }
 
 // ─── Aggregated Data ──────────────────────────────────────────────────
@@ -60,6 +65,7 @@ interface QuotaData {
         yesterdayTokens: number;
         sevenDayTokens: number;
         periodTokens: number;
+        totalTokens: number;
     };
 }
 
@@ -165,7 +171,21 @@ async function fetchAllBillingRecords(apiKey: string, minStartTime?: number): Pr
     return allRecords;
 }
 
-function calculateStats(records: ChargeRecord[]): QuotaData['stats'] {
+// One-shot: get the lifetime total token consumption (uses server-side sum, no pagination).
+async function fetchTotalTokens(apiKey: string): Promise<number> {
+    const { statusCode, body } = await httpsGet(
+        'https://www.minimaxi.com/account/amount?page=1&limit=1&aggregate=true',
+        { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' }
+    );
+    if (statusCode < 200 || statusCode >= 300) throw new Error(`HTTP ${statusCode}`);
+    const json: BillingResponse = JSON.parse(body);
+    if (json.base_resp && json.base_resp.status_code !== 0) {
+        throw new Error(json.base_resp.status_msg || 'API error');
+    }
+    return Number(json.consume_token_sum || 0);
+}
+
+function calculateStats(records: ChargeRecord[], totalTokens = 0): QuotaData['stats'] {
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     const sevenDaysAgo = now.getTime() - 7 * 86400000;
@@ -182,7 +202,7 @@ function calculateStats(records: ChargeRecord[]): QuotaData['stats'] {
         if (ts >= sevenDaysAgo) sevenDayTokens += token;
         if (ts >= thirtyDaysAgo) periodTokens += token;
     }
-    return { yesterdayTokens, sevenDayTokens, periodTokens };
+    return { yesterdayTokens, sevenDayTokens, periodTokens, totalTokens };
 }
 
 // ─── Extension Lifecycle ──────────────────────────────────────────────
@@ -294,8 +314,11 @@ async function refreshQuota(showMessage = false) {
         let stats: QuotaData['stats'] | undefined;
         try {
             const minStart = Date.now() - 30 * 86400000; // look back 30 days max
-            const records = await fetchAllBillingRecords(apiKey, minStart);
-            stats = calculateStats(records);
+            const [records, totalTokens] = await Promise.all([
+                fetchAllBillingRecords(apiKey, minStart),
+                fetchTotalTokens(apiKey),
+            ]);
+            stats = calculateStats(records, totalTokens);
         } catch {
             // billing fetch failure is non-fatal
         }
@@ -412,6 +435,7 @@ function buildTooltip(data: QuotaData): vscode.MarkdownString {
         tip.appendMarkdown(`- 昨日: ${formatTokensCN(stats.yesterdayTokens)}\n`);
         tip.appendMarkdown(`- 近7天: ${formatTokensCN(stats.sevenDayTokens)}\n`);
         tip.appendMarkdown(`- 近30天: ${formatTokensCN(stats.periodTokens)}\n`);
+        tip.appendMarkdown(`- 累计: ${formatTokensCN(stats.totalTokens)}\n`);
         tip.appendMarkdown('\n');
     }
 
