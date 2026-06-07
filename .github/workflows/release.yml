@@ -5,6 +5,12 @@ on:
     branches: [main]
     paths:
       - 'package.json'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Override version (leave empty to use package.json)'
+        required: false
+        default: ''
 
 jobs:
   release:
@@ -24,7 +30,11 @@ jobs:
       - name: Read version from package.json
         id: version
         run: |
-          VERSION=$(node -p "require('./package.json').version")
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION=$(node -p "require('./package.json').version")
+          fi
           echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Release target: v$VERSION"
 
