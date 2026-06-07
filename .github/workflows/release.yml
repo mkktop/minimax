@@ -14,7 +14,6 @@ on:
 
 jobs:
   release:
-    if: contains(github.event.head_commit.message, 'bump version')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -27,48 +26,59 @@ jobs:
         with:
           node-version: 20
 
-      - name: Read version from package.json
+      - name: Determine whether to release
         id: version
         run: |
+          set -e
           if [ -n "${{ inputs.version }}" ]; then
             VERSION="${{ inputs.version }}"
+            echo "::notice::Using override version: $VERSION"
           else
             VERSION=$(node -p "require('./package.json').version")
+            echo "::notice::Current package.json version: $VERSION"
           fi
-          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Release target: v$VERSION"
 
-      - name: Check if release tag already exists
-        id: check_tag
-        run: |
-          if git rev-parse "refs/tags/v${{ steps.version.outputs.VERSION }}" >/dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "Tag v${{ steps.version.outputs.VERSION }} already exists, skipping."
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "")
+          SHOULD_RELEASE="true"
+
+          if [ -z "$LATEST_TAG" ]; then
+            echo "::notice::No prior release tag found. Will release v$VERSION."
+          elif [ "$VERSION" = "$LATEST_TAG" ]; then
+            echo "::notice::Version v$VERSION matches latest release ($LATEST_TAG). Skipping."
+            SHOULD_RELEASE="false"
           else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Version changed: v$LATEST_TAG → v$VERSION. Will release."
           fi
+
+          if [ "$SHOULD_RELEASE" = "true" ] && git rev-parse "refs/tags/v$VERSION" >/dev/null 2>&1; then
+            echo "::warning::Tag v$VERSION already exists. Skipping."
+            SHOULD_RELEASE="false"
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "should_release=$SHOULD_RELEASE" >> "$GITHUB_OUTPUT"
 
       - name: Install dependencies
-        if: steps.check_tag.outputs.exists == 'false'
+        if: steps.version.outputs.should_release == 'true'
         run: npm install
 
       - name: Type check
-        if: steps.check_tag.outputs.exists == 'false'
+        if: steps.version.outputs.should_release == 'true'
         run: npx tsc --noEmit
 
       - name: Compile
-        if: steps.check_tag.outputs.exists == 'false'
+        if: steps.version.outputs.should_release == 'true'
         run: npx tsc -p ./
 
       - name: Package VSIX
-        if: steps.check_tag.outputs.exists == 'false'
+        if: steps.version.outputs.should_release == 'true'
         run: npx vsce package --no-dependencies
 
       - name: Create GitHub Release
-        if: steps.check_tag.outputs.exists == 'false'
+        if: steps.version.outputs.should_release == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.version.outputs.VERSION }}
-          name: v${{ steps.version.outputs.VERSION }}
+          tag_name: v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
           generate_release_notes: true
           files: '*.vsix'
